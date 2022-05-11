@@ -3,11 +3,13 @@ help:
 	@echo "build - The Docker image jobsity/spark-postgres"
 	@echo "network - Create the develop docker network"
 	@echo "postgres - Run a Postres container (exposes port 5432)"
-	@echo "postgres-create-table - execute the SQL commands defined in the src/create_table.sql file"
+	@echo "copy-file" - Copy file to the working directory (Simulates a download)
+	@echo "postgres-create-objects - execute the SQL commands defined in the src/create_table.sql file"
+	@echo "postgres-populate - execute the SQL commands defined in the src/populate_postgres.sql file"
 	@echo "spark - Run a Spark cluster (exposes port 8100)"
 
 
-all: default network postgres postgres-create-table spark
+all: default network postgres spark copy-file postgres-create-objects postgres-populate
 
 default: build
 
@@ -16,6 +18,9 @@ build:
 
 network:
 	@docker network inspect develop >/dev/null 2>&1 || docker network create develop
+
+copy-file:
+	cp trips.csv /tmp/
 
 postgres:
 	@docker start postgres > /dev/null 2>&1 || docker run --name postgres \
@@ -26,9 +31,10 @@ postgres:
 		-v /tmp:/var/lib/postgresql/data \
 		-p 5432:5432 -d postgres:11
 
-postgres-create-table:
-	cat src/sqls/create_table.sql | docker exec -i postgres psql -U postgres
-	cp trips.csv /tmp/
+postgres-create-objects:
+	cat src/sqls/create_objects.sql | docker exec -i postgres psql -U postgres
+
+postgres-populate:
 	cat src/sqls/populate_postgres.sql | docker exec -i postgres psql -U postgres
 
 spark:
@@ -40,5 +46,4 @@ spark-submit:
 
 spark-submit-insert:
 	cp src/insert_postgres.py /tmp/
-	cp trips.csv /tmp/
 	docker exec spark spark-submit --master spark://spark:7077 /data/insert_postgres.py

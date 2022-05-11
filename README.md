@@ -123,43 +123,74 @@ DO NOTHING;
 TRUNCATE TABLE public.stg_trip_data;
 ```
 
-### Calculating the Frequencies With Spark
+## Analyzing data stored in Postgres
+
+Since the workload is not heavy at first, we'll send the queries directly to the container getting faster results on screen.
+
+For example, to analyze which regions have the `cheap_mobile` datasource, we create the `.sql` file `cheap_mobile_datasource_regions` with the query:
+
+```sql
+SELECT region
+FROM public.hist_trip_data
+WHERE datasource = 'cheap_mobile'
+GROUP BY region; --using group by instead of distinct.
+```
+
+And run it directly on the container (also parametrized in the Makefile):
+
+```bash
+cat src/sqls/cheap_mobile_datasource_regions.sql | docker exec -i postgres psql -U postgres
+```
+
+### Loading table using Spark
+
+It's also possible to load the table using the forementioned spark clusters.This wasn't the main approach on this pipeline because it's better to use native connectors than emulate through jdbc and having some bottlenecs or throughput latency.
 
 ```python
 import pyspark
 
-conf = pyspark.SparkConf().setAppName('Postgres').setMaster('spark://spark:7077')
-sc = pyspark.SparkContext(conf=conf)
-session = pyspark.sql.SparkSession(sc)
+if __name__ == '__main__':
+    sc = pyspark.SparkContext(appName='load_stg_postgres')
 
-jdbc_url = 'jdbc:postgresql://postgres/postgres'
-connection_properties = {
-'user': 'postgres',
-'password': 'postgres',
-'driver': 'org.postgresql.Driver',
-'stringtype': 'unspecified'}
+    table = 'public.stg_trip_data'
+    csv_source = '/data/trips.csv'
 
-df = session.read.jdbc(jdbc_url,'public.coin_toss',properties=connection_properties)
+    try:
+        session = pyspark.sql.SparkSession(sc)
 
-samples = df.count()
-stats = df.groupBy('outcome').count()
+        jdbc_url = 'jdbc:postgresql://postgres/postgres'
+        connection_properties = {
+            'user': 'postgres',
+                    'password': 'postgres',
+                    'driver': 'org.postgresql.Driver',
+                    'stringtype': 'unspecified'}
 
-for row in stats.rdd.collect():
-print("{} {}%".format(row['outcome'], row['count'] / samples * 100))
-
-sc.stop()
+        df = session.read.option("delimiter", ",").option("header", "true").csv(csv_source)
+        df.show()
+        df.write.jdbc(jdbc_url, table, connection_properties)
+    except:
+        print('Error loading data from ',csv_source,'into ', table, '. Please refer to Spark log.')
+    finally:
+        sc.stop()
 ```
 
 ## Running A Spark Job
 
-Instead of driving everything from a Jupyter notebook, we can run our Python code directly on Spark by submitting it as a job.
-
-I've packaged the coin toss example as a Python file at `pyspark/src/main.py`.
-
-We can submit the code as a job to spark by running:
+On this module, submitting spark jobs is intended to run heavy data analytics when the database is big enough to need it. On a cloud environment we woud use EMR / Dataproc to handle this work.
 
 ```bash
-make spark-submit
+make spark-submit-insert
 ```
-## Next steps
+
+## A way to inform the user about the status of the data ingestion without using a polling solution
+
+![imagem](https://raw.githubusercontent.com/gqvsantos/jobsity-data-pipeline/main/images/spark_status.jpg)
+
+If the user is familiar with spark context he can acess `http://localhost:8100/` and get real time processing status.
+
+
+## Sketching how I would approach this on a cloud environment
+
 ![imagem](https://raw.githubusercontent.com/gqvsantos/jobsity-data-pipeline/main/images/cloud_environment.jpeg)
+
+One simple approach would be to create a Lambda function and add an S3 bucket trigger to it. When the the file lands in our S3 bucket, the Lambda is triggered. The lambda creates an EMR cluster and passes our ETL code stored in an S3 bucket to it. The EMR cluster executes the ETL code and terminates. The ETL code could store the file as parquet in the bucket, or insert the data into a RDS managed DB, or Redshift.
