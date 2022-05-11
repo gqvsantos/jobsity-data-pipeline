@@ -161,3 +161,5 @@ We can submit the code as a job to spark by running:
 ```bash
 make spark-submit
 ```
+## Next steps
+![imagem](https://raw.githubusercontent.com/gqvsantos/jobsity-data-pipeline/main/images/cloud_environment.jpeg)
