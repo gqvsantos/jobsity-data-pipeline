@@ -7,6 +7,7 @@ help:
 	@echo "postgres-create-objects - execute the SQL commands defined in the src/create_table.sql file"
 	@echo "postgres-populate - execute the SQL commands defined in the src/populate_postgres.sql file"
 	@echo "spark - Run a Spark cluster (exposes port 8100)"
+	@echo "spark-submit-insert - Load postgres tables through spark job"
 
 
 all: default network postgres spark copy-file postgres-create-objects postgres-populate
@@ -39,10 +40,6 @@ postgres-populate:
 
 spark:
 	docker-compose up -d
-
-spark-submit:
-	cp src/main.py /tmp/
-	docker exec spark spark-submit --master spark://spark:7077 /data/main.py
 
 spark-submit-insert:
 	cp src/insert_postgres.py /tmp/
