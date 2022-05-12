@@ -29,3 +29,6 @@ DO NOTHING;
 
 /*Clean staging for next batch*/
 TRUNCATE TABLE public.stg_trip_data;
+
+/*Refresh view to display results after populate*/
+REFRESH MATERIALIZED VIEW summarized_trip_data;
